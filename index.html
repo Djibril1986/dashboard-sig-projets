@@ -2,41 +2,68 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Dashboard SIG - Recherche par projet</title>
+  <title>Dashboard SIG - Projets avec couches WMS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; }
+    body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
     #sidebar {
-      width: 300px; padding: 15px; background: #f4f4f4;
-      overflow-y: auto; border-right: 1px solid #ccc;
+      width: 300px; padding: 15px; background: #f9f9f9;
+      border-right: 1px solid #ccc; overflow-y: auto;
     }
     #map { flex: 1; }
-    #search-bar input {
-      width: 100%; padding: 8px;
-      border: 1px solid #999; border-radius: 5px;
-      font-size: 14px;
+    input[type="text"] {
+      width: 100%; padding: 8px; margin-top: 10px;
+      font-size: 14px; border: 1px solid #aaa; border-radius: 4px;
     }
   </style>
 </head>
 <body>
   <div id="sidebar">
-    <h2>🔍 Rechercher un projet</h2>
-    <div id="search-bar">
-      <input type="text" id="search-input" placeholder="Nom du projet..." />
-    </div>
+    <h3>🔍 Rechercher un projet</h3>
+    <input type="text" id="search-input" placeholder="Nom du projet..." />
   </div>
   <div id="map"></div>
 
   <script>
-    const map = L.map('map').setView([-2.5, 28.8], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
+    const map = L.map('map').setView([-2.5, 28.8], 10);
+
+    // 🗺️ Fond OSM
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    let geojsonLayer;
+    // 🌍 WMS - Limites administratives
+    const limites = L.tileLayer.wms("https://ahocevar.com/geoserver/wms", {
+      layers: "ne:ne_10m_admin_1_states_provinces",
+      format: "image/png",
+      transparent: true,
+      attribution: "© Natural Earth"
+    });
 
+    // 🌊 WMS - Rivières
+    const rivieres = L.tileLayer.wms("https://ahocevar.com/geoserver/wms", {
+      layers: "ne:ne_10m_rivers_lake_centerlines",
+      format: "image/png",
+      transparent: true,
+      attribution: "© Natural Earth"
+    });
+
+    // ✅ Contrôle des couches
+    const baseMaps = {
+      "OSM (Fond de carte)": osm
+    };
+
+    const overlayMaps = {
+      "Limites administratives": limites,
+      "Rivières": rivieres
+    };
+
+    L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+
+    // 📍 Projets (GeoJSON)
+    let geojsonLayer;
     fetch('Projet_WebSIG_Corrige_15_Projets.geojson')
       .then(res => res.json())
       .then(data => {
@@ -50,20 +77,22 @@
             fillOpacity: 0.8
           }),
           onEachFeature: (feature, layer) => {
-            const props = feature.properties;
-            const popup = `<b>${props["Nom du projet"]}</b><br>Partenaire : ${props.Partenaire}<br>Avancement : ${props["Avancement (%)"]}%`;
+            const p = feature.properties;
+            const popup = `<b>${p["Nom du projet"]}</b><br>Partenaire : ${p.Partenaire}<br>Avancement : ${p["Avancement (%)"]}%`;
             layer.bindPopup(popup);
           }
         }).addTo(map);
       });
 
-    // 🔍 Recherche dynamique par nom
+    // 🔍 Filtrage des projets par nom
     document.getElementById("search-input").addEventListener("input", function (e) {
-      const searchValue = e.target.value.toLowerCase();
-      geojsonLayer.eachLayer(function (layer) {
-        const nom = layer.feature.properties["Nom du projet"].toLowerCase();
-        const visible = nom.includes(searchValue);
-        layer.setStyle({ opacity: visible ? 1 : 0.2, fillOpacity: visible ? 0.9 : 0.1 });
+      const search = e.target.value.toLowerCase();
+      if (!geojsonLayer) return;
+
+      geojsonLayer.eachLayer(layer => {
+        const nom = layer.feature.properties["Nom du projet"]?.toLowerCase() || "";
+        const visible = nom.includes(search);
+        layer.setStyle({ opacity: visible ? 1 : 0.1, fillOpacity: visible ? 0.9 : 0.1 });
       });
     });
   </script>
